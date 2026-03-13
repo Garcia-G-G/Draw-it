@@ -1,0 +1,42 @@
+# Dependencies
+node_modules
+
+# Build
+dist
+dist-ssr
+
+# Env
+.env
+*.local
+
+# IDE
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Project docs (not part of the app)
+00_*.md
+01_*.md
+02_*.md
+03_*.md
+04_*.md
+05_*.md
+06_*.md
+07_*.md
+*.docx
+claude.md
+.claude/
+
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# Test output
+server/test-output.png
