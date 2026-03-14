@@ -3,6 +3,7 @@ interface GeneratePayload {
   prompt: string;
   quality: string;
   size: string;
+  promptOverride?: string;
 }
 
 interface GenerateResult {
@@ -11,9 +12,14 @@ interface GenerateResult {
   revisedPrompt: string | null;
 }
 
+interface RefineResult {
+  imageBase64: string;
+}
+
 interface HealthResponse {
   status: string;
-  hasApiKey: boolean;
+  hasOpenAI: boolean;
+  hasFal: boolean;
   timestamp: string;
 }
 
@@ -30,33 +36,34 @@ export async function generateImage(payload: GeneratePayload): Promise<GenerateR
   const body = JSON.stringify(payload);
   const headers = { 'Content-Type': 'application/json' };
 
-  // Try primary endpoint (Images Edit API)
   const primaryResponse = await fetch('/api/generate', { method: 'POST', headers, body });
-
-  if (primaryResponse.ok) {
-    return primaryResponse.json() as Promise<GenerateResult>;
-  }
+  if (primaryResponse.ok) return primaryResponse.json() as Promise<GenerateResult>;
 
   const primaryError = await parseErrorResponse(primaryResponse);
-  console.error(`[generateImage] Primary endpoint failed: ${primaryError}`);
+  console.error(`[generateImage] Primary failed: ${primaryError}`);
 
-  // Fall back to Responses API
   const fallbackResponse = await fetch('/api/generate-v2', { method: 'POST', headers, body });
+  if (fallbackResponse.ok) return fallbackResponse.json() as Promise<GenerateResult>;
 
-  if (fallbackResponse.ok) {
-    return fallbackResponse.json() as Promise<GenerateResult>;
+  throw new Error(await parseErrorResponse(fallbackResponse));
+}
+
+export async function refineImage(imageBase64: string, quality: string): Promise<RefineResult> {
+  const response = await fetch('/api/refine', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ imageBase64, quality }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseErrorResponse(response));
   }
 
-  const fallbackError = await parseErrorResponse(fallbackResponse);
-  throw new Error(fallbackError);
+  return response.json() as Promise<RefineResult>;
 }
 
 export async function checkHealth(): Promise<HealthResponse> {
   const response = await fetch('/api/health');
-
-  if (!response.ok) {
-    throw new Error(`Health check failed with status ${response.status}`);
-  }
-
+  if (!response.ok) throw new Error(`Health check failed (${response.status})`);
   return response.json() as Promise<HealthResponse>;
 }

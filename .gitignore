@@ -40,3 +40,4 @@ npm-debug.log*
 
 # Test output
 server/test-output.png
+draw-it/

@@ -32,7 +32,7 @@ interface AppStore {
   setCanvasDataUrl: (dataUrl: string | null) => void;
   setIsDrawing: (isDrawing: boolean) => void;
 
-  // AI state
+  // AI state (HD)
   generatedImage: string | null;
   isGenerating: boolean;
   selectedStyle: DrawingStyleId;
@@ -43,6 +43,25 @@ interface AppStore {
   setSelectedStyle: (style: DrawingStyleId) => void;
   setGenerationError: (error: string | null) => void;
   setDetectedSubject: (subject: string | null) => void;
+  promptOverride: string;
+  setPromptOverride: (text: string) => void;
+
+  // Realtime preview state
+  realtimePreview: string | null;
+  realtimeLatency: number;
+  isRealtimeEnabled: boolean;
+  isRealtimeGenerating: boolean;
+  previewMode: 'realtime' | 'hd';
+  setRealtimePreview: (img: string | null) => void;
+  setRealtimeLatency: (ms: number) => void;
+  setIsRealtimeEnabled: (on: boolean) => void;
+  setIsRealtimeGenerating: (on: boolean) => void;
+  setPreviewMode: (mode: 'realtime' | 'hd') => void;
+
+  // Server capabilities
+  hasOpenAI: boolean;
+  hasFal: boolean;
+  setCapabilities: (openai: boolean, fal: boolean) => void;
 
   // Auto-generate settings
   autoGenerate: boolean;
@@ -76,7 +95,7 @@ interface AppStore {
   compareMode: boolean;
   setCompareMode: (on: boolean) => void;
 
-  // History state (ImageData for performance)
+  // History state
   snapshots: ImageData[];
   historyIndex: number;
   addToHistory: (snapshot: ImageData) => void;
@@ -86,7 +105,6 @@ interface AppStore {
 }
 
 export const useAppStore = create<AppStore>((set, get) => ({
-  // Tool state defaults
   activeTool: 'pencil',
   brushSize: 3,
   brushColor: '#000000',
@@ -94,31 +112,46 @@ export const useAppStore = create<AppStore>((set, get) => ({
   setBrushSize: (size) => set({ brushSize: Math.max(1, Math.min(50, size)) }),
   setBrushColor: (color) => set({ brushColor: color }),
 
-  // Canvas state defaults
   canvasDataUrl: null,
   isDrawing: false,
   setCanvasDataUrl: (dataUrl) => set({ canvasDataUrl: dataUrl }),
   setIsDrawing: (isDrawing) => set({ isDrawing }),
 
-  // AI state defaults
   generatedImage: null,
   isGenerating: false,
   selectedStyle: 'realistic',
   generationError: null,
   detectedSubject: null,
-  setGeneratedImage: (image) => set({ generatedImage: image }),
+  setGeneratedImage: (image) => set({ generatedImage: image, previewMode: 'hd' }),
   setIsGenerating: (isGenerating) => set({ isGenerating }),
   setSelectedStyle: (style) => set({ selectedStyle: style }),
   setGenerationError: (error) => set({ generationError: error }),
   setDetectedSubject: (subject) => set({ detectedSubject: subject }),
+  promptOverride: '',
+  setPromptOverride: (text) => set({ promptOverride: text }),
 
-  // Auto-generate defaults
+  // Realtime state
+  realtimePreview: null,
+  realtimeLatency: 0,
+  isRealtimeEnabled: false,
+  isRealtimeGenerating: false,
+  previewMode: 'realtime',
+  setRealtimePreview: (img) => set({ realtimePreview: img, previewMode: img ? 'realtime' : get().previewMode }),
+  setRealtimeLatency: (ms) => set({ realtimeLatency: ms }),
+  setIsRealtimeEnabled: (on) => set({ isRealtimeEnabled: on }),
+  setIsRealtimeGenerating: (on) => set({ isRealtimeGenerating: on }),
+  setPreviewMode: (mode) => set({ previewMode: mode }),
+
+  // Capabilities (detected from /api/health)
+  hasOpenAI: true,
+  hasFal: false,
+  setCapabilities: (openai, fal) => set({ hasOpenAI: openai, hasFal: fal, isRealtimeEnabled: fal }),
+
   autoGenerate: false,
   debounceDelay: 2000,
   setAutoGenerate: (auto) => set({ autoGenerate: auto }),
   setDebounceDelay: (delay) => set({ debounceDelay: delay }),
 
-  // Generation stats defaults
   generationCount: 0,
   estimatedCost: 0,
   lastGenerationTime: null,
@@ -144,85 +177,50 @@ export const useAppStore = create<AppStore>((set, get) => ({
   },
   setSelectedQuality: (quality) => set({ selectedQuality: quality }),
 
-  // Gallery defaults
   gallery: [],
   activeGalleryId: null,
   setActiveGalleryId: (id) => {
     const { gallery } = get();
     const item = gallery.find((g) => g.id === id);
-    if (item) {
-      set({
-        activeGalleryId: id,
-        generatedImage: item.imageBase64,
-      });
-    }
+    if (item) set({ activeGalleryId: id, generatedImage: item.imageBase64, previewMode: 'hd' });
   },
 
-  // Theme
   theme: getInitialTheme(),
-  setTheme: (theme) => {
-    localStorage.setItem('drawit-theme', theme);
-    set({ theme });
-  },
+  setTheme: (theme) => { localStorage.setItem('drawit-theme', theme); set({ theme }); },
 
-  // Toast notifications
   toasts: [],
   addToast: (type, message) => {
     const id = `toast-${++toastCounter}`;
     set({ toasts: [...get().toasts, { id, type, message }] });
-    setTimeout(() => {
-      const { toasts } = get();
-      set({ toasts: toasts.filter((t) => t.id !== id) });
-    }, 3000);
+    setTimeout(() => { const { toasts } = get(); set({ toasts: toasts.filter((t) => t.id !== id) }); }, 3000);
   },
-  removeToast: (id) => {
-    set({ toasts: get().toasts.filter((t) => t.id !== id) });
-  },
+  removeToast: (id) => set({ toasts: get().toasts.filter((t) => t.id !== id) }),
 
-  // Compare mode
   compareMode: false,
   setCompareMode: (on) => set({ compareMode: on }),
 
-  // History state defaults
   snapshots: [],
   historyIndex: -1,
-
   addToHistory: (snapshot) => {
     const { snapshots, historyIndex } = get();
-    const newSnapshots = snapshots.slice(0, historyIndex + 1);
-    newSnapshots.push(snapshot);
-    if (newSnapshots.length > MAX_HISTORY_SIZE) newSnapshots.shift();
-    set({ snapshots: newSnapshots, historyIndex: newSnapshots.length - 1 });
+    const ns = snapshots.slice(0, historyIndex + 1);
+    ns.push(snapshot);
+    if (ns.length > MAX_HISTORY_SIZE) ns.shift();
+    set({ snapshots: ns, historyIndex: ns.length - 1 });
   },
-
   undo: () => {
     const { historyIndex, snapshots } = get();
-    if (historyIndex > 0) {
-      const newIndex = historyIndex - 1;
-      set({ historyIndex: newIndex });
-      return snapshots[newIndex];
-    }
+    if (historyIndex > 0) { set({ historyIndex: historyIndex - 1 }); return snapshots[historyIndex - 1]; }
     return null;
   },
-
   redo: () => {
     const { historyIndex, snapshots } = get();
-    if (historyIndex < snapshots.length - 1) {
-      const newIndex = historyIndex + 1;
-      set({ historyIndex: newIndex });
-      return snapshots[newIndex];
-    }
+    if (historyIndex < snapshots.length - 1) { set({ historyIndex: historyIndex + 1 }); return snapshots[historyIndex + 1]; }
     return null;
   },
-
-  clearCanvas: () => {
-    set({
-      snapshots: [],
-      historyIndex: -1,
-      canvasDataUrl: null,
-      generatedImage: null,
-      generationError: null,
-      detectedSubject: null,
-    });
-  },
+  clearCanvas: () => set({
+    snapshots: [], historyIndex: -1, canvasDataUrl: null,
+    generatedImage: null, generationError: null, detectedSubject: null,
+    realtimePreview: null,
+  }),
 }));
