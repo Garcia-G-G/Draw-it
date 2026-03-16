@@ -134,7 +134,7 @@ app.post('/api/realtime-generate', async (req, res) => {
     const raw = strip(imageBase64);
     const startMs = Date.now();
 
-    const response = await together.images.create({
+    const response = await together.images.generate({
       model: 'black-forest-labs/FLUX.1-schnell-Free',
       prompt: prompt || 'Professional high quality artwork, detailed, beautiful',
       image_url: `data:image/jpeg;base64,${raw}`,
@@ -151,7 +151,7 @@ app.post('/api/realtime-generate', async (req, res) => {
     if (!b64) {
       // Try paid model if free model fails
       logInfo('realtime', 'Free model failed, trying paid model...');
-      const fallback = await together.images.create({
+      const fallback = await together.images.generate({
         model: 'black-forest-labs/FLUX.1-schnell',
         prompt: prompt || 'Professional high quality artwork, detailed, beautiful',
         image_url: `data:image/jpeg;base64,${raw}`,
