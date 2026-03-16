@@ -3,7 +3,7 @@ import { useAppStore } from '../store/useAppStore';
 import { realtimeGenerate, cancelRealtime } from '../services/realtime';
 import type { DrawingStyleId } from '../types';
 
-const THROTTLE_MS = 300;
+const THROTTLE_MS = 500;
 const BLANK_THRESHOLD = 1000;
 
 const REALTIME_STYLE_PROMPTS: Record<DrawingStyleId, string> = {

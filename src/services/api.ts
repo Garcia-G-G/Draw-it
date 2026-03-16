@@ -19,7 +19,9 @@ interface RefineResult {
 interface HealthResponse {
   status: string;
   hasOpenAI: boolean;
+  hasTogether: boolean;
   hasFal: boolean;
+  imageModel: string;
   timestamp: string;
 }
 

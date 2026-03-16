@@ -61,7 +61,8 @@ interface AppStore {
   // Server capabilities
   hasOpenAI: boolean;
   hasFal: boolean;
-  setCapabilities: (openai: boolean, fal: boolean) => void;
+  hasTogether: boolean;
+  setCapabilities: (caps: { openai: boolean; fal: boolean; together: boolean }) => void;
 
   // Auto-generate settings
   autoGenerate: boolean;
@@ -145,7 +146,9 @@ export const useAppStore = create<AppStore>((set, get) => ({
   // Capabilities (detected from /api/health)
   hasOpenAI: true,
   hasFal: false,
-  setCapabilities: (openai, fal) => set({ hasOpenAI: openai, hasFal: fal, isRealtimeEnabled: fal }),
+  hasTogether: false,
+  setCapabilities: (caps: { openai: boolean; fal: boolean; together: boolean }) =>
+    set({ hasOpenAI: caps.openai, hasFal: caps.fal, hasTogether: caps.together, isRealtimeEnabled: caps.together || caps.fal }),
 
   autoGenerate: false,
   debounceDelay: 2000,

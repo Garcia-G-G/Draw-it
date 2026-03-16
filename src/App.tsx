@@ -15,7 +15,7 @@ function App() {
   // Detect server capabilities on mount
   useEffect(() => {
     checkHealth()
-      .then((h) => useAppStore.getState().setCapabilities(h.hasOpenAI, h.hasFal))
+      .then((h) => useAppStore.getState().setCapabilities({ openai: h.hasOpenAI, fal: h.hasFal, together: h.hasTogether ?? false }))
       .catch(() => { /* server unreachable — use defaults */ });
   }, []);
 

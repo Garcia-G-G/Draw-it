@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import OpenAI, { toFile } from 'openai';
-import { fal } from '@fal-ai/client';
+import Together from 'together-ai';
 
 dotenv.config();
 
@@ -11,36 +11,25 @@ const PORT = process.env.PORT || 3001;
 const OPENAI_TIMEOUT_MS = 60_000;
 
 const openaiKey = process.env.OPENAI_API_KEY;
-const falKey = process.env.FAL_KEY;
+const togetherKey = process.env.TOGETHER_API_KEY;
 const openai = openaiKey ? new OpenAI({ apiKey: openaiKey, timeout: OPENAI_TIMEOUT_MS }) : null;
-
-if (falKey) fal.config({ credentials: falKey });
+const together = togetherKey ? new Together({ apiKey: togetherKey }) : null;
 
 app.use(cors({ origin: ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:4173'] }));
 app.use(express.json({ limit: '10mb' }));
-
-// ─── Best available model (detected at startup) ─────────────────────────────
 
 let imageModel = 'gpt-image-1';
 
 async function detectBestModel() {
   if (!openai) return;
   try {
-    await openai.images.generate({
-      model: 'gpt-image-1.5',
-      prompt: 'A small red dot.',
-      n: 1,
-      size: '1024x1024',
-      quality: 'low',
-    });
+    await openai.images.generate({ model: 'gpt-image-1.5', prompt: 'A small red dot.', n: 1, size: '1024x1024', quality: 'low' });
     imageModel = 'gpt-image-1.5';
-    logInfo('startup', 'Using gpt-image-1.5 (better quality)');
+    logInfo('startup', 'Using gpt-image-1.5');
   } catch (err) {
     logInfo('startup', `gpt-image-1.5 not available (${err.status || err.message}), using gpt-image-1`);
   }
 }
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function ts() { return new Date().toISOString(); }
 function logError(ctx, err) { console.error(`[${ts()}] [${ctx}]`, err.message || err); }
@@ -50,7 +39,7 @@ function strip(b64) { return b64.replace(/^data:image\/\w+;base64,/, ''); }
 function mapOpenAIError(error) {
   if (!error.status) {
     if (error.code === 'ETIMEDOUT' || error.message?.includes('timeout'))
-      return { status: 504, message: "Generation timed out. Try with 'low' quality." };
+      return { status: 504, message: "Timed out. Try 'low' quality." };
     return { status: 500, message: 'An unexpected error occurred.' };
   }
   switch (error.status) {
@@ -59,17 +48,17 @@ function mapOpenAIError(error) {
     case 400: {
       const m = error.message?.toLowerCase() || '';
       if (m.includes('content_policy') || m.includes('safety') || m.includes('flagged'))
-        return { status: 400, message: 'Content policy violation. Try something different.' };
+        return { status: 400, message: 'Content policy violation.' };
       return { status: 400, message: 'Could not process. Try redrawing.' };
     }
     case 500: case 502: case 503:
-      return { status: 502, message: 'OpenAI issues. Try again in a minute.' };
+      return { status: 502, message: 'OpenAI issues. Try again shortly.' };
     default:
       return { status: error.status, message: error.message || 'Unexpected error.' };
   }
 }
 
-// ─── Vision (concise prompt) ─────────────────────────────────────────────────
+// ─── Vision ──────────────────────────────────────────────────────────────────
 
 const VISION_PROMPT = `You are analyzing a rough hand-drawn sketch. Describe what it depicts in vivid detail so an image generator can create a professional version WITHOUT seeing the sketch.
 
@@ -100,7 +89,7 @@ async function analyzeSketch(rawBase64) {
   }
 }
 
-// ─── Concise prompt builder (<100 words total) ──────────────────────────────
+// ─── Prompt builder ──────────────────────────────────────────────────────────
 
 function suggestEnvironment(subject) {
   const s = subject.toLowerCase();
@@ -108,9 +97,9 @@ function suggestEnvironment(subject) {
   if (/cat|dog|animal|bird|pet/.test(s)) return 'Natural setting.';
   if (/house|building|castle|cottage/.test(s)) return 'Landscape with sky and garden.';
   if (/car|truck|vehicle|bicycle/.test(s)) return 'Appropriate road or setting.';
-  if (/tree|flower|plant|mountain|landscape/.test(s)) return 'Full natural scene with atmospheric perspective.';
+  if (/tree|flower|plant|mountain|landscape/.test(s)) return 'Full natural scene.';
   if (/food|cake|pizza|fruit|coffee/.test(s)) return 'Appetizing food photography setup.';
-  if (/pants|shirt|dress|clothes|shoe|fashion/.test(s)) return 'Clean fashion product photography background.';
+  if (/pants|shirt|dress|clothes|shoe|fashion/.test(s)) return 'Clean fashion product photography.';
   return 'Appropriate contextual background.';
 }
 
@@ -124,38 +113,69 @@ function buildPrompt(subject, stylePrompt, promptOverride) {
 // ─── Routes ───────────────────────────────────────────────────────────────────
 
 app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok', hasOpenAI: Boolean(openaiKey), hasFal: Boolean(falKey), imageModel, timestamp: ts() });
+  res.json({
+    status: 'ok',
+    hasOpenAI: Boolean(openaiKey),
+    hasTogether: Boolean(togetherKey),
+    hasFal: false,
+    imageModel,
+    timestamp: ts(),
+  });
 });
 
-// ─── Realtime: fal.ai ────────────────────────────────────────────────────────
+// ─── Live Preview: Together.ai FLUX.1 [schnell] (~300ms-2s) ─────────────────
 
 app.post('/api/realtime-generate', async (req, res) => {
-  if (!falKey) return res.status(503).json({ error: 'fal.ai not configured.' });
+  if (!together) return res.status(503).json({ error: 'Set TOGETHER_API_KEY in .env' });
   try {
-    const { imageBase64, prompt, strength = 0.65 } = req.body;
+    const { imageBase64, prompt } = req.body;
     if (!imageBase64) return res.status(400).json({ error: 'Missing imageBase64' });
+
+    const raw = strip(imageBase64);
     const startMs = Date.now();
-    const result = await fal.subscribe('fal-ai/fast-lightning-sdxl/image-to-image', {
-      input: {
-        image_url: `data:image/jpeg;base64,${strip(imageBase64)}`,
-        prompt: prompt || 'Professional artwork, high quality',
-        strength, num_inference_steps: 4, image_size: 'square_hd', enable_safety_checker: true,
-      },
+
+    const response = await together.images.create({
+      model: 'black-forest-labs/FLUX.1-schnell-Free',
+      prompt: prompt || 'Professional high quality artwork, detailed, beautiful',
+      image_url: `data:image/jpeg;base64,${raw}`,
+      width: 1024,
+      height: 1024,
+      steps: 4,
+      n: 1,
+      response_format: 'base64',
     });
+
     const latency = Date.now() - startMs;
-    const outputUrl = result.data?.images?.[0]?.url;
-    if (!outputUrl) return res.status(502).json({ error: 'fal.ai returned no image.' });
-    const imgRes = await fetch(outputUrl);
-    const b64 = Buffer.from(await imgRes.arrayBuffer()).toString('base64');
-    logInfo('realtime', `${latency}ms`);
+    const b64 = response.data?.[0]?.b64_json;
+
+    if (!b64) {
+      // Try paid model if free model fails
+      logInfo('realtime', 'Free model failed, trying paid model...');
+      const fallback = await together.images.create({
+        model: 'black-forest-labs/FLUX.1-schnell',
+        prompt: prompt || 'Professional high quality artwork, detailed, beautiful',
+        image_url: `data:image/jpeg;base64,${raw}`,
+        width: 1024,
+        height: 1024,
+        steps: 4,
+        n: 1,
+        response_format: 'base64',
+      });
+      const fb64 = fallback.data?.[0]?.b64_json;
+      if (!fb64) return res.status(502).json({ error: 'Together.ai returned no image.' });
+      logInfo('realtime', `FLUX schnell (paid): ${Date.now() - startMs}ms`);
+      return res.json({ imageBase64: fb64, latency: Date.now() - startMs });
+    }
+
+    logInfo('realtime', `FLUX schnell: ${latency}ms`);
     res.json({ imageBase64: b64, latency });
   } catch (error) {
     logError('realtime', error);
-    res.status(500).json({ error: error.message || 'Realtime failed.' });
+    res.status(500).json({ error: error.message || 'Realtime generation failed.' });
   }
 });
 
-// ─── PRIMARY: Text-to-image (NO sketch input to generator) ──────────────────
+// ─── HD: Text-to-image via OpenAI ────────────────────────────────────────────
 
 app.post('/api/generate', async (req, res) => {
   if (!openai) return res.status(503).json({ error: 'Set OPENAI_API_KEY in .env' });
@@ -163,25 +183,19 @@ app.post('/api/generate', async (req, res) => {
     const { imageBase64, prompt, quality = 'medium', size = '1024x1024', promptOverride } = req.body;
     if (!imageBase64 || !prompt) return res.status(400).json({ error: 'Missing required fields' });
 
-    // Step 1: Vision — sketch only used here
     let detectedSubject = null;
     if (!promptOverride) {
-      logInfo('generate', 'Step 1: Vision analysis...');
+      logInfo('generate', 'Step 1: Vision...');
       detectedSubject = await analyzeSketch(strip(imageBase64));
     } else {
       logInfo('generate', `Override: "${promptOverride}"`);
     }
 
-    // Step 2: Text-to-image — NO sketch input
     const finalPrompt = buildPrompt(detectedSubject, prompt, promptOverride);
-    logInfo('generate', `Step 2: ${imageModel} | prompt: "${finalPrompt.slice(0, 120)}..."`);
+    logInfo('generate', `Step 2: ${imageModel} | "${finalPrompt.slice(0, 100)}..."`);
 
     const response = await openai.images.generate({
-      model: imageModel,
-      prompt: finalPrompt,
-      n: 1,
-      size,
-      quality,
+      model: imageModel, prompt: finalPrompt, n: 1, size, quality,
     });
 
     const generatedBase64 = response.data?.[0]?.b64_json;
@@ -199,7 +213,7 @@ app.post('/api/generate', async (req, res) => {
   }
 });
 
-// ─── FALLBACK: Responses API ─────────────────────────────────────────────────
+// ─── HD Fallback: Responses API ──────────────────────────────────────────────
 
 app.post('/api/generate-v2', async (req, res) => {
   if (!openai) return res.status(503).json({ error: 'Set OPENAI_API_KEY in .env' });
@@ -212,7 +226,7 @@ app.post('/api/generate-v2', async (req, res) => {
     if (!promptOverride) detectedSubject = await analyzeSketch(rawBase64);
 
     const basePrompt = buildPrompt(detectedSubject, prompt, promptOverride);
-    const finalPrompt = `Create a brand new professional image (DO NOT trace or modify the sketch): ${basePrompt}`;
+    const finalPrompt = `Create a brand new professional image (DO NOT trace the sketch): ${basePrompt}`;
 
     const response = await openai.responses.create({
       model: 'gpt-4.1',
@@ -237,7 +251,7 @@ app.post('/api/generate-v2', async (req, res) => {
   }
 });
 
-// ─── Refine (edit API is correct for refining good images) ───────────────────
+// ─── Refine ──────────────────────────────────────────────────────────────────
 
 app.post('/api/refine', async (req, res) => {
   if (!openai) return res.status(503).json({ error: 'Set OPENAI_API_KEY in .env' });
@@ -245,19 +259,15 @@ app.post('/api/refine', async (req, res) => {
     const { imageBase64, quality = 'medium' } = req.body;
     if (!imageBase64) return res.status(400).json({ error: 'Missing imageBase64' });
 
-    const rawBase64 = strip(imageBase64);
-    const imageFile = await toFile(Buffer.from(rawBase64, 'base64'), 'image.png', { type: 'image/png' });
-
+    const imageFile = await toFile(Buffer.from(strip(imageBase64), 'base64'), 'image.png', { type: 'image/png' });
     const response = await openai.images.edit({
-      model: imageModel,
-      image: imageFile,
-      prompt: 'Enhance this image: add more detail, improve lighting and shadows, richer colors, refined edges. Keep same subject and composition. Make it dramatically better.',
+      model: imageModel, image: imageFile,
+      prompt: 'Enhance: more detail, better lighting, richer colors, refined edges. Keep same subject. Make dramatically better.',
       n: 1, size: '1024x1024', quality,
     });
 
     const generatedBase64 = response.data?.[0]?.b64_json;
     if (!generatedBase64) return res.status(502).json({ error: 'Refine failed.' });
-
     res.json({ imageBase64: generatedBase64 });
   } catch (error) {
     logError('refine', error);
@@ -270,13 +280,12 @@ app.post('/api/refine', async (req, res) => {
 app.listen(PORT, async () => {
   console.log(`\n  Draw It API server running on http://localhost:${PORT}`);
   console.log(`  OpenAI: ${openaiKey ? '\u2713' : '\u2717 missing'}`);
-  console.log(`  fal.ai: ${falKey ? '\u2713 realtime' : '\u2717 disabled'}`);
+  console.log(`  Together.ai: ${togetherKey ? '\u2713 realtime (FLUX schnell)' : '\u2717 disabled'}`);
 
   if (openaiKey) {
     console.log('  Detecting best image model...');
     await detectBestModel();
     console.log(`  Image model: ${imageModel}`);
   }
-
   console.log();
 });
