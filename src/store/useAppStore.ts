@@ -58,6 +58,10 @@ interface AppStore {
   setIsRealtimeGenerating: (on: boolean) => void;
   setPreviewMode: (mode: 'realtime' | 'hd') => void;
 
+  // Live preview (WebGL shaders — client-side, no API)
+  isLivePreviewEnabled: boolean;
+  setIsLivePreviewEnabled: (on: boolean) => void;
+
   // Server capabilities
   hasOpenAI: boolean;
   hasFal: boolean;
@@ -142,6 +146,10 @@ export const useAppStore = create<AppStore>((set, get) => ({
   setIsRealtimeEnabled: (on) => set({ isRealtimeEnabled: on }),
   setIsRealtimeGenerating: (on) => set({ isRealtimeGenerating: on }),
   setPreviewMode: (mode) => set({ previewMode: mode }),
+
+  // Live preview (WebGL — always available, no API needed)
+  isLivePreviewEnabled: true,
+  setIsLivePreviewEnabled: (on) => set({ isLivePreviewEnabled: on }),
 
   // Capabilities (detected from /api/health)
   hasOpenAI: true,

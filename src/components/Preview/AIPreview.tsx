@@ -28,8 +28,13 @@ async function copyToClipboard(dataUrl: string): Promise<boolean> {
   } catch { return false; }
 }
 
-const AIPreview: React.FC = () => {
+interface AIPreviewProps {
+  livePreviewCanvasRef?: React.RefObject<HTMLCanvasElement | null>;
+}
+
+const AIPreview: React.FC<AIPreviewProps> = ({ livePreviewCanvasRef }) => {
   const generatedImage = useAppStore((s) => s.generatedImage);
+  const isLivePreviewEnabled = useAppStore((s) => s.isLivePreviewEnabled);
   const realtimePreview = useAppStore((s) => s.realtimePreview);
   const realtimeLatency = useAppStore((s) => s.realtimeLatency);
   const isRealtimeGenerating = useAppStore((s) => s.isRealtimeGenerating);
@@ -261,17 +266,47 @@ const AIPreview: React.FC = () => {
     );
   }
 
-  // Empty state
+  // Live preview (WebGL shader) or empty state
+  if (isLivePreviewEnabled && livePreviewCanvasRef) {
+    return (
+      <div className="flex h-full w-full flex-col rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
+        <div className="relative min-h-0 flex-1 overflow-hidden rounded-t-lg bg-gray-100 dark:bg-gray-900">
+          <canvas
+            ref={livePreviewCanvasRef}
+            className="h-full w-full object-contain"
+            style={{ imageRendering: 'auto' }}
+          />
+          <div className="absolute top-2 left-2">
+            <span className="flex items-center gap-1 rounded bg-green-500/80 px-1.5 py-0.5 text-[10px] font-medium text-white shadow backdrop-blur-sm">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" />
+              LIVE
+            </span>
+          </div>
+        </div>
+        <div className="flex items-center gap-1.5 border-t border-gray-100 px-2 py-1.5 dark:border-gray-700">
+          <span className="mr-auto text-[10px] text-gray-400 dark:text-gray-500">Shader preview (60fps)</span>
+          {hasOpenAI && (
+            <button onClick={handleHDUpgrade} disabled={isGenerating}
+              className="rounded-md bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-700 hover:bg-amber-100 dark:bg-amber-900/30 dark:text-amber-300">
+              \u2728 Generate HD
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Empty state (no live preview, no generated image)
   return (
     <div className="flex h-full w-full flex-col items-center justify-center rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 p-6 dark:border-gray-600 dark:bg-gray-800/50">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="mb-3 h-12 w-12 text-gray-300 dark:text-gray-600">
         <path strokeLinecap="round" strokeLinejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0 0 22.5 18.75V5.25A2.25 2.25 0 0 0 20.25 3H3.75A2.25 2.25 0 0 0 1.5 5.25v13.5A2.25 2.25 0 0 0 3.75 21Z" />
       </svg>
       <p className="mb-1 text-center text-sm font-medium text-gray-400 dark:text-gray-500">
-        {isRealtimeEnabled ? 'Draw something \u2014 live preview as you draw' : autoGenerate ? 'Draw something \u2014 AI generates automatically' : 'Draw something and click Generate'}
+        {autoGenerate ? 'Draw something \u2014 AI generates automatically' : 'Draw something and click Generate'}
       </p>
       <p className="max-w-[220px] text-center text-xs text-gray-300 dark:text-gray-600">
-        {isRealtimeEnabled ? 'Click HD Upgrade for stunning final render' : 'Click the sparkle button in the toolbar'}
+        Click the sparkle button in the toolbar
       </p>
     </div>
   );

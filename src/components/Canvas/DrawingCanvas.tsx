@@ -1,38 +1,36 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useImperativeHandle, forwardRef } from 'react';
 import { useCanvas } from '../../hooks/useCanvas';
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
 import { useAppStore } from '../../store';
 
-const DrawingCanvas: React.FC = () => {
+export interface DrawingCanvasHandle {
+  getMainCanvas: () => HTMLCanvasElement | null;
+}
+
+const DrawingCanvas = forwardRef<DrawingCanvasHandle>((_props, ref) => {
   const mainCanvasRef = useRef<HTMLCanvasElement>(null);
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
   const activeTool = useAppStore((s) => s.activeTool);
 
+  useImperativeHandle(ref, () => ({
+    getMainCanvas: () => mainCanvasRef.current,
+  }), []);
+
   const {
-    onMouseDown,
-    onMouseMove,
-    onMouseUp,
-    onMouseLeave,
-    onTouchStart,
-    onTouchMove,
-    onTouchEnd,
-    undo,
-    redo,
-    clearCanvas,
+    onMouseDown, onMouseMove, onMouseUp, onMouseLeave,
+    onTouchStart, onTouchMove, onTouchEnd,
+    undo, redo, clearCanvas,
   } = useCanvas(mainCanvasRef, previewCanvasRef);
 
   useKeyboardShortcuts({ onUndo: undo, onRedo: redo });
 
-  // Listen for toolbar custom events
   useEffect(() => {
     const handleUndo = () => undo();
     const handleRedo = () => redo();
     const handleClear = () => clearCanvas();
-
     window.addEventListener('canvas:undo', handleUndo);
     window.addEventListener('canvas:redo', handleRedo);
     window.addEventListener('canvas:clear', handleClear);
-
     return () => {
       window.removeEventListener('canvas:undo', handleUndo);
       window.removeEventListener('canvas:redo', handleRedo);
@@ -44,23 +42,18 @@ const DrawingCanvas: React.FC = () => {
 
   return (
     <div className="relative h-full w-full overflow-hidden rounded-lg bg-white shadow-sm dark:shadow-none dark:ring-1 dark:ring-gray-700">
-      <canvas
-        ref={mainCanvasRef}
-        className="absolute inset-0"
-      />
+      <canvas ref={mainCanvasRef} className="absolute inset-0" />
       <canvas
         ref={previewCanvasRef}
         className={`absolute inset-0 ${cursorClass}`}
-        onMouseDown={onMouseDown}
-        onMouseMove={onMouseMove}
-        onMouseUp={onMouseUp}
-        onMouseLeave={onMouseLeave}
-        onTouchStart={onTouchStart}
-        onTouchMove={onTouchMove}
-        onTouchEnd={onTouchEnd}
+        onMouseDown={onMouseDown} onMouseMove={onMouseMove}
+        onMouseUp={onMouseUp} onMouseLeave={onMouseLeave}
+        onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}
       />
     </div>
   );
-};
+});
+
+DrawingCanvas.displayName = 'DrawingCanvas';
 
 export default React.memo(DrawingCanvas);

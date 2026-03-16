@@ -19,10 +19,12 @@ const Header: React.FC = () => {
   const hasFal = useAppStore((s) => s.hasFal);
   const hasTogether = useAppStore((s) => s.hasTogether);
   const hasOpenAI = useAppStore((s) => s.hasOpenAI);
+  const isLivePreviewEnabled = useAppStore((s) => s.isLivePreviewEnabled);
   const setAutoGenerate = useAppStore((s) => s.setAutoGenerate);
   const setSelectedQuality = useAppStore((s) => s.setSelectedQuality);
   const setTheme = useAppStore((s) => s.setTheme);
   const setIsRealtimeEnabled = useAppStore((s) => s.setIsRealtimeEnabled);
+  const setIsLivePreviewEnabled = useAppStore((s) => s.setIsLivePreviewEnabled);
 
   const [qualityOpen, setQualityOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -30,6 +32,7 @@ const Header: React.FC = () => {
   const toggleAutoGenerate = useCallback(() => setAutoGenerate(!autoGenerate), [autoGenerate, setAutoGenerate]);
   const toggleTheme = useCallback(() => setTheme(theme === 'light' ? 'dark' : 'light'), [theme, setTheme]);
   const toggleRealtime = useCallback(() => setIsRealtimeEnabled(!isRealtimeEnabled), [isRealtimeEnabled, setIsRealtimeEnabled]);
+  const toggleLivePreview = useCallback(() => setIsLivePreviewEnabled(!isLivePreviewEnabled), [isLivePreviewEnabled, setIsLivePreviewEnabled]);
   const handleQualitySelect = useCallback((q: GenerationQuality) => { setSelectedQuality(q); setQualityOpen(false); }, [setSelectedQuality]);
 
   useEffect(() => {
@@ -51,7 +54,18 @@ const Header: React.FC = () => {
         <span className="rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300">AI</span>
       </div>
 
-      {/* Live Preview toggle (Together.ai or fal.ai) */}
+      {/* Live shader preview toggle (always available — no API needed) */}
+      <button onClick={toggleLivePreview}
+        className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
+          isLivePreviewEnabled
+            ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'
+            : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+        }`}>
+        <span className={`h-1.5 w-1.5 rounded-full ${isLivePreviewEnabled ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`} />
+        Live {isLivePreviewEnabled ? 'ON' : 'OFF'}
+      </button>
+
+      {/* AI Preview toggle (Together.ai or fal.ai) */}
       {(hasTogether || hasFal) && (
         <button onClick={toggleRealtime}
           className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
