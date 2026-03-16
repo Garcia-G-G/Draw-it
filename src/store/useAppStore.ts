@@ -155,7 +155,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   generationCount: 0,
   estimatedCost: 0,
   lastGenerationTime: null,
-  selectedQuality: 'low',
+  selectedQuality: 'medium',
   recordGeneration: (durationMs, imageBase64) => {
     const { generationCount, estimatedCost, selectedQuality, selectedStyle, gallery } = get();
     const item: GalleryItem = {
