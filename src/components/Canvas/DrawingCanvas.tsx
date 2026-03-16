@@ -1,20 +1,12 @@
-import React, { useRef, useEffect, useImperativeHandle, forwardRef } from 'react';
+import React, { useRef, useEffect } from 'react';
 import { useCanvas } from '../../hooks/useCanvas';
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
 import { useAppStore } from '../../store';
 
-export interface DrawingCanvasHandle {
-  getMainCanvas: () => HTMLCanvasElement | null;
-}
-
-const DrawingCanvas = forwardRef<DrawingCanvasHandle>((_props, ref) => {
+const DrawingCanvas: React.FC = () => {
   const mainCanvasRef = useRef<HTMLCanvasElement>(null);
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
   const activeTool = useAppStore((s) => s.activeTool);
-
-  useImperativeHandle(ref, () => ({
-    getMainCanvas: () => mainCanvasRef.current,
-  }), []);
 
   const {
     onMouseDown, onMouseMove, onMouseUp, onMouseLeave,
@@ -52,8 +44,6 @@ const DrawingCanvas = forwardRef<DrawingCanvasHandle>((_props, ref) => {
       />
     </div>
   );
-});
-
-DrawingCanvas.displayName = 'DrawingCanvas';
+};
 
 export default React.memo(DrawingCanvas);
