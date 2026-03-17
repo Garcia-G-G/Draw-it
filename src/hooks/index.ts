@@ -5,3 +5,4 @@ export { useRealtimeGeneration } from './useRealtimeGeneration';
 export { useDebounce } from './useDebounce';
 export { useKeyboardShortcuts } from './useKeyboardShortcuts';
 export { useLivePreview } from './useLivePreview';
+export { useFalRealtime } from './useFalRealtime';

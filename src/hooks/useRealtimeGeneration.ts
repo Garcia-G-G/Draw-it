@@ -26,6 +26,7 @@ export function useRealtimeGeneration(): void {
   const isRealtimeEnabled = useAppStore((s) => s.isRealtimeEnabled);
   const selectedStyle = useAppStore((s) => s.selectedStyle);
   const isGenerating = useAppStore((s) => s.isGenerating);
+  const hasFal = useAppStore((s) => s.hasFal);
 
   const lastSentRef = useRef<string | null>(null);
   const throttleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -41,6 +42,9 @@ export function useRealtimeGeneration(): void {
   }, []);
 
   useEffect(() => {
+    // fal.ai WebSocket handles realtime when available — yield to it
+    if (hasFal) return;
+
     if (!isRealtimeEnabled || !canvasDataUrl || canvasDataUrl.length < BLANK_THRESHOLD) {
       return;
     }
@@ -80,5 +84,5 @@ export function useRealtimeGeneration(): void {
         }
       }
     }, THROTTLE_MS);
-  }, [canvasDataUrl, isRealtimeEnabled, selectedStyle, isGenerating]);
+  }, [canvasDataUrl, isRealtimeEnabled, selectedStyle, isGenerating, hasFal]);
 }

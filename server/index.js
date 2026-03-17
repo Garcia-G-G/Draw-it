@@ -3,6 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import OpenAI, { toFile } from 'openai';
 import Together from 'together-ai';
+import * as falProxy from '@fal-ai/server-proxy/express';
 
 dotenv.config();
 
@@ -12,11 +13,19 @@ const OPENAI_TIMEOUT_MS = 60_000;
 
 const openaiKey = process.env.OPENAI_API_KEY;
 const togetherKey = process.env.TOGETHER_API_KEY;
+const falKey = process.env.FAL_KEY;
 const openai = openaiKey ? new OpenAI({ apiKey: openaiKey, timeout: OPENAI_TIMEOUT_MS }) : null;
 const together = togetherKey ? new Together({ apiKey: togetherKey }) : null;
 
 app.use(cors({ origin: ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:4173'] }));
 app.use(express.json({ limit: '10mb' }));
+
+// fal.ai proxy — lets the frontend WebSocket connect to fal.ai via our server
+// The FAL_KEY env var is read automatically by the proxy handler
+if (falKey) {
+  app.all(falProxy.route, falProxy.handler);
+  logInfo('startup', 'fal.ai proxy configured');
+}
 
 let imageModel = 'gpt-image-1';
 
@@ -117,7 +126,7 @@ app.get('/api/health', (_req, res) => {
     status: 'ok',
     hasOpenAI: Boolean(openaiKey),
     hasTogether: Boolean(togetherKey),
-    hasFal: false,
+    hasFal: Boolean(falKey),
     imageModel,
     timestamp: ts(),
   });
@@ -280,7 +289,8 @@ app.post('/api/refine', async (req, res) => {
 app.listen(PORT, async () => {
   console.log(`\n  Draw It API server running on http://localhost:${PORT}`);
   console.log(`  OpenAI: ${openaiKey ? '\u2713' : '\u2717 missing'}`);
-  console.log(`  Together.ai: ${togetherKey ? '\u2713 realtime (FLUX schnell)' : '\u2717 disabled'}`);
+  console.log(`  fal.ai: ${falKey ? '\u2713 realtime WebSocket (LCM ~150ms)' : '\u2717 disabled'}`);
+  console.log(`  Together.ai: ${togetherKey ? '\u2713 FLUX schnell' : '\u2717 disabled'}`);
 
   if (openaiKey) {
     console.log('  Detecting best image model...');

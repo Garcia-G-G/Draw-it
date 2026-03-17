@@ -51,6 +51,7 @@ const AIPreview: React.FC<AIPreviewProps> = ({ livePreviewCanvasRef }) => {
   const activeGalleryId = useAppStore((s) => s.activeGalleryId);
   const compareMode = useAppStore((s) => s.compareMode);
   const hasOpenAI = useAppStore((s) => s.hasOpenAI);
+  const hasFal = useAppStore((s) => s.hasFal);
   const setActiveGalleryId = useAppStore((s) => s.setActiveGalleryId);
   const setCompareMode = useAppStore((s) => s.setCompareMode);
   const setPromptOverride = useAppStore((s) => s.setPromptOverride);
@@ -181,7 +182,7 @@ const AIPreview: React.FC<AIPreviewProps> = ({ livePreviewCanvasRef }) => {
             )}
             {!isHD && realtimePreview && !isGenerating && (
               <span className="rounded bg-indigo-500/80 px-1.5 py-0.5 text-[10px] font-medium text-white shadow backdrop-blur-sm">
-                Live {realtimeLatency > 0 ? `~${(realtimeLatency / 1000).toFixed(1)}s` : ''}
+                {hasFal ? 'Real-time AI' : `Live ${realtimeLatency > 0 ? `~${(realtimeLatency / 1000).toFixed(1)}s` : ''}`}
               </span>
             )}
             {isRealtimeGenerating && !isGenerating && (

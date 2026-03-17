@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { Header, SplitView, StyleSelector } from './components/Layout';
 import { ToastContainer } from './components/UI';
-import { useRealtimeGeneration } from './hooks';
+import { useRealtimeGeneration, useFalRealtime } from './hooks';
 import { checkHealth } from './services/api';
 import { useAppStore } from './store';
 
@@ -19,7 +19,9 @@ function App() {
       .catch(() => { /* server unreachable — use defaults */ });
   }, []);
 
-  // Realtime generation loop (no-ops if disabled)
+  // Realtime generation — fal.ai WebSocket (preferred) or Together.ai HTTP fallback
+  // Both hooks check their availability flags internally, so both are safe to call
+  useFalRealtime();
   useRealtimeGeneration();
 
   return (
