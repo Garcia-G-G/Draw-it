@@ -9,26 +9,38 @@ import {
 import type { DrawingStyleId } from '../types';
 
 const BLANK_THRESHOLD = 1000;
-const DEFAULT_STRENGTH = 0.6;
 
+// SDXL Lightning strength — 0.75 is the sweet spot:
+// High enough to add rich detail/style, low enough to preserve
+// the sketch's composition and shapes. SDXL understands structure
+// much better than SD1.5 LCM at the same strength level.
+const DEFAULT_STRENGTH = 0.75;
+
+// Throttle between HTTP requests (ms)
+const THROTTLE_MS = 400;
+
+// Prompts tuned for SDXL Lightning img2img — these tell the model
+// to treat the input as a sketch/drawing and create a styled version
+// that preserves the composition.
 const REALTIME_STYLE_PROMPTS: Record<DrawingStyleId, string> = {
-  realistic: 'photorealistic, studio lighting, high detail, 8k, cinematic',
-  illustration: 'digital illustration, bold outlines, rich colors, editorial art',
-  sketch: 'pencil drawing, detailed shading, cross-hatching, fine art',
-  '3d': '3D render, studio lighting, PBR materials, ambient occlusion, octane',
-  watercolor: 'watercolor painting, textured paper, soft color bleeds, vibrant',
-  'pixel-art': 'pixel art, limited palette, sharp pixels, 16-bit game',
-  minimal: 'minimalist line art, thin lines, clean, white background',
-  cartoon: 'cartoon, bright colors, bold outlines, Disney quality, cel-shading',
-  anime: 'anime illustration, cel-shading, vibrant colors, detailed eyes, Makoto Shinkai',
-  'oil-paint': 'oil painting, visible brushstrokes, rich colors, museum quality',
-  neon: 'neon glow, dark background, cyberpunk, Blade Runner, electric colors',
-  isometric: 'isometric 3D, flat colors, clean edges, geometric, Monument Valley',
+  realistic: 'professional photograph based on this sketch, photorealistic, studio lighting, high detail, sharp focus, cinematic color grading, 8k',
+  illustration: 'digital illustration based on this drawing, bold outlines, rich saturated colors, editorial art style, detailed, vibrant composition',
+  sketch: 'refined pencil drawing based on this sketch, detailed shading, cross-hatching, fine art, dramatic contrast, on textured paper',
+  '3d': '3D render based on this sketch, studio lighting, PBR materials, ambient occlusion, octane render, clean geometry, vivid colors',
+  watercolor: 'watercolor painting based on this drawing, textured paper, vivid color bleeds, saturated pigments, artistic soft edges',
+  'pixel-art': 'pixel art based on this sketch, limited color palette, sharp pixels, 16-bit game style, colorful detailed sprites',
+  minimal: 'clean minimalist line art based on this drawing, thin elegant lines, white background, professional graphic design',
+  cartoon: 'cartoon illustration based on this sketch, bright vivid colors, bold outlines, Disney Pixar quality, cel-shading, fun and expressive',
+  anime: 'anime illustration based on this drawing, cel-shading, vibrant colors, detailed expressive eyes, Makoto Shinkai style, colorful scene',
+  'oil-paint': 'oil painting based on this sketch, visible thick brushstrokes, rich saturated colors, museum quality, dramatic Rembrandt lighting',
+  neon: 'neon cyberpunk art based on this drawing, glowing neon outlines, dark background, Blade Runner aesthetic, electric vivid colors',
+  isometric: 'isometric 3D illustration based on this sketch, vivid flat colors, clean edges, geometric shapes, Monument Valley style',
 };
 
 /**
- * Hook that drives real-time image generation via fal.ai WebSocket.
- * Does nothing if hasFal is false — safe to call unconditionally.
+ * Hook that drives real-time image generation via fal.ai.
+ * Uses SDXL Lightning (4-step) which preserves sketch composition
+ * far better than SD1.5 LCM.
  */
 export function useFalRealtime(): void {
   const canvasDataUrl = useAppStore((s) => s.canvasDataUrl);
@@ -38,8 +50,9 @@ export function useFalRealtime(): void {
 
   const connectedRef = useRef(false);
   const mountedRef = useRef(true);
+  const throttleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Initialize WebSocket connection when hasFal becomes true
+  // Initialize when hasFal becomes true
   useEffect(() => {
     mountedRef.current = true;
 
@@ -51,7 +64,6 @@ export function useFalRealtime(): void {
       const imageUrl = result.images?.[0]?.url;
       if (!imageUrl) return;
 
-      // Store the URL directly — <img> handles both data URLs and http URLs
       useAppStore.getState().setRealtimePreview(imageUrl);
       useAppStore.getState().setIsRealtimeGenerating(false);
     };
@@ -69,18 +81,25 @@ export function useFalRealtime(): void {
       mountedRef.current = false;
       closeFalRealtime();
       connectedRef.current = false;
+      if (throttleRef.current) clearTimeout(throttleRef.current);
     };
   }, [hasFal]);
 
-  // Send frames when canvas changes
+  // Send frames when canvas changes (throttled for HTTP)
   useEffect(() => {
     if (!hasFal || !connectedRef.current) return;
     if (!canvasDataUrl || canvasDataUrl.length < BLANK_THRESHOLD) return;
     if (isGenerating) return;
 
-    const prompt = REALTIME_STYLE_PROMPTS[selectedStyle];
+    if (throttleRef.current) clearTimeout(throttleRef.current);
 
-    useAppStore.getState().setIsRealtimeGenerating(true);
-    sendFrame(canvasDataUrl, prompt, DEFAULT_STRENGTH);
+    throttleRef.current = setTimeout(() => {
+      if (!mountedRef.current) return;
+
+      const prompt = REALTIME_STYLE_PROMPTS[selectedStyle];
+      useAppStore.getState().setIsRealtimeGenerating(true);
+
+      sendFrame(canvasDataUrl, prompt, DEFAULT_STRENGTH);
+    }, THROTTLE_MS);
   }, [canvasDataUrl, selectedStyle, hasFal, isGenerating]);
 }

@@ -20,11 +20,43 @@ const together = togetherKey ? new Together({ apiKey: togetherKey }) : null;
 app.use(cors({ origin: ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:4173'] }));
 app.use(express.json({ limit: '10mb' }));
 
-// fal.ai proxy — lets the frontend WebSocket connect to fal.ai via our server
-// The FAL_KEY env var is read automatically by the proxy handler
+// fal.ai proxy — lets the frontend connect to fal.ai via our server
 if (falKey) {
+  // REST proxy for regular API calls
   app.all(falProxy.route, falProxy.handler);
-  logInfo('startup', 'fal.ai proxy configured');
+
+  // Token endpoint for real-time WebSocket connections
+  app.post('/api/fal/auth/token', async (req, res) => {
+    try {
+      // Strip /realtime suffix the SDK appends before sending to token API
+      const rawApp = req.body?.app || 'fal-ai/fast-lightning-sdxl';
+      const appId = rawApp.replace(/\/realtime$/, '');
+      console.log('[fal-token] Requesting token for app:', appId);
+
+      const response = await fetch('https://rest.fal.ai/tokens/realtime', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Key ${falKey}`,
+        },
+        body: JSON.stringify({
+          app: appId,
+          duration: 120,
+        }),
+      });
+      if (!response.ok) {
+        const text = await response.text();
+        console.error('[fal-token] Failed:', response.status, text);
+        return res.status(response.status).json({ error: text });
+      }
+      const data = await response.json();
+      console.log('[fal-token] Token obtained successfully');
+      res.json(data);
+    } catch (err) {
+      console.error('[fal-token] Error:', err.message);
+      res.status(500).json({ error: 'Failed to get fal.ai token' });
+    }
+  });
 }
 
 let imageModel = 'gpt-image-1';
